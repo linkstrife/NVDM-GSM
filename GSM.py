@@ -1,7 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import gensim
-import keras
 import utils
 import os
 
