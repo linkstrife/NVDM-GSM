@@ -150,4 +150,90 @@ def train(sess, model,train_url,test_url,batch_size,training_epochs=1000,alterna
                     ppx_sum += np.sum(np.divide(loss, count_batch))
                     doc_count += np.sum(mask)
                 print_ppx = np.exp(loss_sum / word_count)
-                print_ppx_perdoc = np.exp(ppx_sum 
+                print_ppx_perdoc = np.exp(ppx_sum / doc_count)
+                print_kld = kld_sum / len(train_batches)
+                print('| Epoch train: {:d} |'.format(epoch + 1),
+                      print_mode, '{:d}'.format(i + 1),
+                      '| Corpus ppx: {:.5f}'.format(print_ppx),  # perplexity for all docs
+                      '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),  # perplexity for per doc
+                      '| KLD: {:.5}'.format(print_kld))
+        # -------------------------------
+        # dev
+        loss_sum = 0.0
+        kld_sum = 0.0
+        ppx_sum = 0.0
+        word_count = 0
+        doc_count = 0
+        for idx_batch in dev_batches:
+            data_batch, count_batch, mask = utils.fetch_data(dev_set, dev_count, idx_batch, FLAGS.vocab_size)
+            input_feed = {model.x.name: data_batch, model.mask.name: mask}
+            loss, kld = sess.run([model.objective, model.kld],input_feed)
+            loss_sum += np.sum(loss)
+            kld_sum += np.sum(kld) / np.sum(mask)
+            word_count += np.sum(count_batch)
+            count_batch = np.add(count_batch, 1e-12)
+            ppx_sum += np.sum(np.divide(loss, count_batch))
+            doc_count += np.sum(mask)
+        print_ppx = np.exp(loss_sum / word_count)
+        print_ppx_perdoc = np.exp(ppx_sum / doc_count)
+        print_kld = kld_sum / len(dev_batches)
+        print('| Epoch dev: {:d} |'.format(epoch + 1),
+              '| Perplexity: {:.9f}'.format(print_ppx),
+              '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),
+              '| KLD: {:.5}'.format(print_kld))
+        # -------------------------------
+        # test
+        if FLAGS.test:
+            loss_sum = 0.0
+            kld_sum = 0.0
+            ppx_sum = 0.0
+            word_count = 0
+            doc_count = 0
+            for idx_batch in test_batches:
+                data_batch, count_batch, mask = utils.fetch_data(
+                    test_set, test_count, idx_batch, FLAGS.vocab_size)
+                input_feed = {model.x.name: data_batch, model.mask.name: mask}
+                loss, kld = sess.run([model.objective, model.kld],
+                                     input_feed)
+                loss_sum += np.sum(loss)
+                kld_sum += np.sum(kld) / np.sum(mask)
+                word_count += np.sum(count_batch)
+                count_batch = np.add(count_batch, 1e-12)
+                ppx_sum += np.sum(np.divide(loss, count_batch))
+                doc_count += np.sum(mask)
+            print_ppx = np.exp(loss_sum / word_count)
+            print_ppx_perdoc = np.exp(ppx_sum / doc_count)
+            print_kld = kld_sum / len(test_batches)
+            print('| Epoch test: {:d} |'.format(epoch + 1),
+                  '| Perplexity: {:.9f}'.format(print_ppx),
+                  '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),
+                  '| KLD: {:.5}'.format(print_kld))
+
+def main(argv=None):
+    if FLAGS.non_linearity == 'tanh':
+      non_linearity = tf.nn.tanh
+    elif FLAGS.non_linearity == 'sigmoid':
+      non_linearity = tf.nn.sigmoid
+    else:
+      non_linearity = tf.nn.leaky_relu
+
+    gsm = GSM(vocab_size=FLAGS.vocab_size,
+                n_hidden=FLAGS.n_hidden,
+                n_topic=FLAGS.n_topic,
+                n_sample=FLAGS.n_sample,
+                learning_rate=FLAGS.learning_rate,
+                batch_size=FLAGS.batch_size,
+                non_linearity=non_linearity,
+                model_type=FLAGS.model_type)
+    sess = tf.Session()
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    train_url = os.path.join(FLAGS.data_dir, 'train.feat')
+    test_url = os.path.join(FLAGS.data_dir, 'test.feat')
+
+    train(sess, gsm, train_url, test_url, FLAGS.batch_size)
+
+if __name__ == '__main__':
+    tf.app.run()
+
