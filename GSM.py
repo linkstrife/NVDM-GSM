@@ -27,18 +27,18 @@ class GSM(object):
         self.non_linearity = non_linearity
         self.model_type = model_type
 
-        # 输入文档向量，n x V维
+        # 输入文档向量，batch_size x vocab_size
         self.x = tf.placeholder(tf.float32, [None, vocab_size], name='input')
         # mask paddings, 用于序列补0
         self.mask = tf.placeholder(tf.float32, [None], name='mask')
 
         with tf.variable_scope('Encoder'):
-            # 编码文档向量
+            # 编码文档向量/feed to VAE
             self.enc_vec = utils.mlp(self.x, [self.n_hidden], self.non_linearity) # encode document embedding
             self.mean = utils.linear(self.enc_vec, self.n_topic, scope='mean') # 均值模块，dim_doc -> dim_topic
             self.log_sigma = utils.linear(self.enc_vec, self.n_topic, matrix_start_zero=True, bias_start_zero=True, scope='logsigma') # 方差模块
 
-            # 多元高斯KL散度 KL(Norm(sigma, miu^2)||Norm(sigma0, miu0^2))
+            # 多元高斯KL散度, KL(Norm(sigma, miu^2)||Norm(miu0, sigma0^2)) (set as standard Gaussian distribution, miu = 0.0, sigma = 1.0)
             self.kld = -0.5 * tf.reduce_sum(1 - tf.square(self.mean) + 2 * self.log_sigma - tf.exp(2 * self.log_sigma), 1)
             self.kld = tf.multiply(self.mask, self.kld)
 
@@ -46,7 +46,7 @@ class GSM(object):
             epsilon = tf.random_normal((self.n_sample * self.batch_size, self.n_topic), 0, 1) # n_sample = 1
             # epsilon_list = tf.split(0, self.n_sample, self.epsilon) # 划分出每个sample的epsilon
 
-            # 解码向量/文档向量
+            # 解码向量/文档向量, dec_vec/doc_vec
             dec_vec = self.mean + tf.multiply(epsilon, tf.exp(self.log_sigma))
 
             # we refer to such models that do not directly assign topics to words as document models instead of topic models
@@ -150,89 +150,4 @@ def train(sess, model,train_url,test_url,batch_size,training_epochs=1000,alterna
                     ppx_sum += np.sum(np.divide(loss, count_batch))
                     doc_count += np.sum(mask)
                 print_ppx = np.exp(loss_sum / word_count)
-                print_ppx_perdoc = np.exp(ppx_sum / doc_count)
-                print_kld = kld_sum / len(train_batches)
-                print('| Epoch train: {:d} |'.format(epoch + 1),
-                      print_mode, '{:d}'.format(i + 1),
-                      '| Corpus ppx: {:.5f}'.format(print_ppx),  # perplexity for all docs
-                      '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),  # perplexity for per doc
-                      '| KLD: {:.5}'.format(print_kld))
-        # -------------------------------
-        # dev
-        loss_sum = 0.0
-        kld_sum = 0.0
-        ppx_sum = 0.0
-        word_count = 0
-        doc_count = 0
-        for idx_batch in dev_batches:
-            data_batch, count_batch, mask = utils.fetch_data(dev_set, dev_count, idx_batch, FLAGS.vocab_size)
-            input_feed = {model.x.name: data_batch, model.mask.name: mask}
-            loss, kld = sess.run([model.objective, model.kld],input_feed)
-            loss_sum += np.sum(loss)
-            kld_sum += np.sum(kld) / np.sum(mask)
-            word_count += np.sum(count_batch)
-            count_batch = np.add(count_batch, 1e-12)
-            ppx_sum += np.sum(np.divide(loss, count_batch))
-            doc_count += np.sum(mask)
-        print_ppx = np.exp(loss_sum / word_count)
-        print_ppx_perdoc = np.exp(ppx_sum / doc_count)
-        print_kld = kld_sum / len(dev_batches)
-        print('| Epoch dev: {:d} |'.format(epoch + 1),
-              '| Perplexity: {:.9f}'.format(print_ppx),
-              '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),
-              '| KLD: {:.5}'.format(print_kld))
-        # -------------------------------
-        # test
-        if FLAGS.test:
-            loss_sum = 0.0
-            kld_sum = 0.0
-            ppx_sum = 0.0
-            word_count = 0
-            doc_count = 0
-            for idx_batch in test_batches:
-                data_batch, count_batch, mask = utils.fetch_data(
-                    test_set, test_count, idx_batch, FLAGS.vocab_size)
-                input_feed = {model.x.name: data_batch, model.mask.name: mask}
-                loss, kld = sess.run([model.objective, model.kld],
-                                     input_feed)
-                loss_sum += np.sum(loss)
-                kld_sum += np.sum(kld) / np.sum(mask)
-                word_count += np.sum(count_batch)
-                count_batch = np.add(count_batch, 1e-12)
-                ppx_sum += np.sum(np.divide(loss, count_batch))
-                doc_count += np.sum(mask)
-            print_ppx = np.exp(loss_sum / word_count)
-            print_ppx_perdoc = np.exp(ppx_sum / doc_count)
-            print_kld = kld_sum / len(test_batches)
-            print('| Epoch test: {:d} |'.format(epoch + 1),
-                  '| Perplexity: {:.9f}'.format(print_ppx),
-                  '| Per doc ppx: {:.5f}'.format(print_ppx_perdoc),
-                  '| KLD: {:.5}'.format(print_kld))
-
-def main(argv=None):
-    if FLAGS.non_linearity == 'tanh':
-      non_linearity = tf.nn.tanh
-    elif FLAGS.non_linearity == 'sigmoid':
-      non_linearity = tf.nn.sigmoid
-    else:
-      non_linearity = tf.nn.leaky_relu
-
-    gsm = GSM(vocab_size=FLAGS.vocab_size,
-                n_hidden=FLAGS.n_hidden,
-                n_topic=FLAGS.n_topic,
-                n_sample=FLAGS.n_sample,
-                learning_rate=FLAGS.learning_rate,
-                batch_size=FLAGS.batch_size,
-                non_linearity=non_linearity,
-                model_type=FLAGS.model_type)
-    sess = tf.Session()
-    init = tf.global_variables_initializer()
-    sess.run(init)
-
-    train_url = os.path.join(FLAGS.data_dir, 'train.feat')
-    test_url = os.path.join(FLAGS.data_dir, 'test.feat')
-
-    train(sess, gsm, train_url, test_url, FLAGS.batch_size)
-
-if __name__ == '__main__':
-    tf.app.run()
+                print_ppx_perdoc = np.exp(ppx_sum 
