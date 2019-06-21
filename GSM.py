@@ -29,7 +29,8 @@ class GSM(object):
 
         # 输入文档向量，n x V维
         self.x = tf.placeholder(tf.float32, [None, vocab_size], name='input')
-        self.mask = tf.placeholder(tf.float32, [None], name='mask') # mask paddings? 用于为kld序列补0
+        # mask paddings, 用于序列补0
+        self.mask = tf.placeholder(tf.float32, [None], name='mask')
 
         with tf.variable_scope('Encoder'):
             # 编码文档向量
@@ -39,7 +40,7 @@ class GSM(object):
 
             # 多元高斯KL散度 KL(Norm(sigma, miu^2)||Norm(sigma0, miu0^2))
             self.kld = -0.5 * tf.reduce_sum(1 - tf.square(self.mean) + 2 * self.log_sigma - tf.exp(2 * self.log_sigma), 1)
-            self.kld = tf.multiply(self.mask, self.kld) # 如果某个batch的文档数小于batch_size，那么补0
+            self.kld = tf.multiply(self.mask, self.kld)
 
             # 重参数采样模块，epsilon从标准正态分布中采样，每个topic隐藏向量对应一个epsilon向量，共有n_sample x batch_size个
             epsilon = tf.random_normal((self.n_sample * self.batch_size, self.n_topic), 0, 1) # n_sample = 1
