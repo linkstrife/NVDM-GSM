@@ -2,7 +2,7 @@
 This is an unofficial tensorflow implementation of the neural variational topic model with Gaussian Softmax Construction (GSM). The original model is Neural Variational Document Model (NVDM). The code paragraph of BOW-VAE impelementation is adpted from https://github.com/ysmiao/nvdm. 
 
 # Reference
-[Discovering Discrete Latent Topics with Neural Variational Inference](https://arxiv.org/pdf/1706.00359.pdf). Miao et al., ICML 2017.
+[Discovering Discrete Latent Topics with Neural Variational Inference](http://proceedings.mlr.press/v70/miao17a.html). Miao et al., ICML 2017.
 This implementation is able to reproduce the results presented in the paper.
 
 # Build Version
